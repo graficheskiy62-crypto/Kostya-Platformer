@@ -62,7 +62,7 @@
 <body>
 <header>
   <h1>КОСТЯ-ПЛАТФОРМЕР</h1>
-  <div class="sub">10 уровней · монстры · босс в конце</div>
+  <div class="sub">приключения Кости — картофелины с добрыми глазами</div>
 </header>
 
 <div class="frame">
@@ -80,7 +80,7 @@
     <div class="panel">
       <canvas id="facePrev" width="88" height="88" style="width:88px;height:88px"></canvas>
       <h2>КОСТЯ</h2>
-      <p>10 уровней и БОСС в конце!<br>Прыгай монстрам на голову, собирай монеты,<br>доберись до флага и срази Короля Жуков!</p>
+      <p>4 уровня · монеты · монстры!<br>Прыгай монстрам на голову, чтобы победить их.<br>Собери монетки и доберись до флага!</p>
       <p>← → / A D — бег · ПРОБЕЛ — прыжок (×2)<br>P — пауза · M — звук · R — заново уровень</p>
       <button class="btn" id="btnStart">ИГРАТЬ</button>
     </div>
@@ -105,7 +105,7 @@
 <footer class="hints">
   <span><kbd>←</kbd><kbd>→</kbd> бег</span>
   <span><kbd>ПРОБЕЛ</kbd> двойной прыжок</span>
-  <span>прыжок на монстра/босса = урон</span>
+  <span>прыжок на монстра = победа</span>
   <span><kbd>R</kbd> заново</span>
   <span><kbd>P</kbd> пауза</span>
   <button class="btn small" id="muteBtn">ЗВУК: ВКЛ</button>
@@ -212,22 +212,7 @@ const BEE = [
 '...YYYYYY...',
 '....YYYY....'
 ];
-const BOSSMAP = [
-'.C..C....C..C.',
-'.CCCCCCCCCCCC.',
-'..PPPPPPPPPP..',
-'.PPPPPPPPPPPP.',
-'PPWRPPPPPPWRPP',
-'PPPPPPPPPPPPPP',
-'PPPPPPPPPPPPPP',
-'.PPPPPPPPPPPP.',
-'..PPPPPPPPPP..',
-'..L..LL..L..L.',
-'..L..LL..L..L.'
-];
 const ESZ = {slime:{w:36,h:27}, beetle:{w:36,h:24}, bee:{w:36,h:21}};
-const BSPR_N = mapSprite(BOSSMAP, {C:'#ffd94a', P:'#8a4bd0', W:'#ffffff', R:'#ff4040', L:'#3a2440'}, 6);
-const BSPR = {n: BSPR_N, f: flipSprite(BSPR_N)};
 const ESPR = {
   slime: mapSprite(SLIME, {G:'#58c04d', W:'#ffffff', K:'#123312', D:'#3d8f36'}, 3),
   beetle: mapSprite(BEETLE, {A:'#5a2a5a', P:'#b06bd4', W:'#ffffff', K:'#2a102a', L:'#3a2440'}, 3),
@@ -258,7 +243,6 @@ const sfx = {
   pad(){ tone('sawtooth',180,900,0.2,0.2); },
   cp(){ tone('sine',620,620,0.09,0.14); tone('sine',930,930,0.12,0.14,0.09); },
   stomp(){ tone('square',500,120,0.12,0.2); },
-  boss(){ tone('sawtooth',120,40,0.5,0.3); },
   win(){ [523,659,784,1047].forEach((f,i)=>tone('square',f,f,0.13,0.16,i*0.11)); }
 };
 const MEL = [64,0,67,0,69,0,67,0,64,0,60,0,62,0,64,0,65,0,62,0,59,0,62,0,64,0,67,0,69,0,72,0];
@@ -305,141 +289,84 @@ window.addEventListener('keyup', e => {
 });
 
 /* ---------- уровни ---------- */
-const LEVEL_NAMES = ['ОГОРОД','ХОЛМЫ','ТРОПЫ','ЛУГА','ОВРАГИ','СКАЛЫ','ПЕЩЕРЫ','ВЕТРА','ВЕРШИНА','ЛОГОВО БОССА'];
-function mulberry32(seed){
-  let a = seed >>> 0;
-  return function(){
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function makeEnemy(type, x0, x1, baseTile){
-  const s = ESZ[type];
-  return {type, x:x0*T, y:(baseTile||11)*T - s.h, w:s.w, h:s.h, dir:1,
-    sp: type==='bee' ? 55 : (type==='beetle' ? 65 : 50),
-    min:x0*T, max:x1*T - s.w, baseY:(baseTile||7)*T, amp:44, freq:2, phase:(x0%6), alive:true, squash:0};
-}
-function genLevel(idx){
-  const rnd = mulberry32(1234 + idx*777);
-  const MAXW = 300;
-  const g = Array.from({length:ROWS}, () => Array(MAXW).fill(' '));
-  const set = (x,y,c) => { if(x >= 0 && x < MAXW && y >= 0 && y < ROWS) g[y][x] = c; };
+const LEVEL_NAMES = ['ОГОРОД', 'ХОЛМЫ', 'ТРОПЫ', 'ВЕРШИНА'];
+const LEVEL_W = [120, 140, 150, 160];
+function buildLevel(idx){
+  const W = LEVEL_W[idx];
+  const g = Array.from({length:ROWS}, () => Array(W).fill(' '));
+  const set = (x,y,c) => { if(x >= 0 && x < W && y >= 0 && y < ROWS) g[y][x] = c; };
   const ground = (x0,x1) => { for(let x=x0;x<=x1;x++) for(let y=11;y<ROWS;y++) set(x,y,'#'); };
   const plat = (x0,x1,y) => { for(let x=x0;x<=x1;x++) set(x,y,'='); };
   const spike = (x0,x1) => { for(let x=x0;x<=x1;x++) set(x,10,'^'); };
   const coin = (x,y) => set(x,y,'o');
+  const cp = x => set(x,10,'C');
+  const pad = x => set(x,10,'U');
+  const flag = x => set(x,10,'F');
   const enemies = [];
-  const en = (t,x0,x1,bt) => enemies.push(makeEnemy(t,x0,x1,bt));
+  const en = (type,x0,x1,baseTile) => {
+    const s = ESZ[type];
+    enemies.push({type, x:x0*T, y:(baseTile||11)*T - s.h, w:s.w, h:s.h, dir:1,
+      sp: type==='bee' ? 55 : (type==='beetle' ? 65 : 50),
+      min:x0*T, max:x1*T - s.w, baseY:(baseTile||7)*T, amp:44, freq:2, phase:(x0%6), alive:true, squash:0});
+  };
   const movPlats = [];
-  const msp = 70 + idx*5;
-  const mh = (g0,g1,y,sp) => movPlats.push({x:(g0-1)*T, y:y*T, w:3*T, h:14, axis:'x', min:(g0-1)*T, max:(g1-2)*T, sp:sp||msp, dir:1, dx:0, dy:0});
+  const mh = (g0,g1,y,sp) => movPlats.push({x:(g0-1)*T, y:y*T, w:3*T, h:14, axis:'x', min:(g0-1)*T, max:(g1-2)*T, sp:sp||70, dir:1, dx:0, dy:0});
   const mv = (x,sp) => movPlats.push({x:(x+1)*T, y:10*T, w:3*T, h:14, axis:'y', min:6*T, max:10*T, sp:sp||60, dir:-1, dx:0, dy:0});
 
-  const eProb = () => Math.min(0.85, 0.35 + idx*0.06);
-  const pickType = () => {
-    if(idx < 2) return rnd() < 0.5 ? 'slime' : 'beetle';
-    const r = rnd();
-    if(idx < 4) return r < 0.4 ? 'slime' : (r < 0.8 ? 'beetle' : 'bee');
-    return r < 0.34 ? 'slime' : (r < 0.67 ? 'beetle' : 'bee');
-  };
-
-  let c = 0, lastGs = 0;
-  ground(0,10); coin(6,8); coin(7,8); coin(8,8);
-  c = 11;
-  const target = 90 + idx*10;
-  let count = 0;
-
-  const chunkRun = () => {
-    const len = 10 + Math.floor(rnd()*6);
-    const gs = c;
-    ground(c, c+len-1); lastGs = gs;
-    if(rnd() < 0.6){ const m = c + Math.floor(len/2); coin(m-1,8); coin(m,8); coin(m+1,8); }
-    if(rnd() < eProb()){
-      const t = pickType();
-      if(t === 'bee'){ en('bee', c+2, c+len-1, rnd() < 0.5 ? 6 : 7); }
-      else if(idx >= 1 && len >= 12 && rnd() < 0.4){
-        const sw = idx >= 4 ? 3 : 2;
-        spike(c+3, c+3+sw-1);
-        en(t, c+7, c+len-2);
-      } else {
-        en(t, c+2, c+len-2);
-      }
-    }
-    return len;
-  };
-  const chunkStair = () => {
-    const len = 13;
-    ground(c, c+len-1); lastGs = c;
-    plat(c+3, c+5, 9); plat(c+8, c+10, 7);
-    coin(c+4,8); coin(c+9,6); coin(c+10,6);
-    if(idx >= 2 && rnd() < 0.5) en('slime', c+11, c+len-1);
-    return len;
-  };
-  const chunkPad = () => {
-    const len = 13;
-    ground(c, c+len-1); lastGs = c;
-    const py = idx >= 5 ? 4 : 5;
-    set(c+len-4, 10, 'U');
-    plat(c+len-6, c+len-2, py);
-    for(let x=c+len-6; x<=c+len-2; x++) coin(x, py-1);
-    return len;
-  };
-  const chunkSpike = () => {
-    const len = 11;
-    ground(c, c+len-1); lastGs = c;
-    const sw = idx >= 4 ? 3 : 2;
-    spike(c+4, c+4+sw-1);
-    coin(c+4,7); coin(c+5,7); if(sw === 3) coin(c+6,7);
-    return len;
-  };
-  const gapSmall = () => { if(rnd() < 0.5) coin(c+1,8); return 3; };
-  const gapMH = () => {
-    const w = (idx >= 4 && rnd() < 0.5) ? 5 : 4;
-    const y = rnd() < 0.5 ? 9 : 8;
-    mh(c, c+w-1, y);
-    coin(c+1,y-2); coin(c+2,y-2);
-    return w;
-  };
-  const gapMV = () => { mv(c, msp-10); coin(c+2,4); coin(c+3,4); return 4; };
-
-  while(c < target){
-    const r = rnd();
-    if(r < 0.34) c += chunkRun();
-    else if(r < 0.55) c += chunkStair();
-    else if(r < 0.78) c += chunkPad();
-    else c += chunkSpike();
-    count++;
-    if(count % 3 === 0) set(lastGs+2, 10, 'C');
-    if(c < target){
-      const gg = rnd();
-      if(idx >= 2 && gg < 0.2) c += gapMV();
-      else if(gg < 0.55) c += gapMH();
-      else c += gapSmall();
-    }
+  if(idx === 0){
+    ground(0,12); coin(7,8); coin(8,8); coin(9,8);
+    ground(16,28); en('beetle',17,22); spike(24,25); cp(27);
+    ground(32,46); en('slime',34,41); pad(43); plat(42,45,5); coin(42,4); coin(43,4); coin(44,4); coin(45,4);
+    ground(50,64); plat(52,54,9); plat(57,59,7); coin(53,8); coin(58,6); en('slime',60,64);
+    ground(68,82); cp(70); spike(74,76); en('beetle',78,82);
+    ground(86,100); en('slime',88,93); en('bee',94,99,7); coin(90,8); coin(96,6);
+    ground(104,119); coin(108,9); coin(110,9); flag(114);
+  } else if(idx === 1){
+    ground(0,10); coin(6,8); coin(7,8);
+    ground(14,24); en('slime',16,21); spike(22,23);
+    ground(28,40); en('bee',30,36,7); pad(38); plat(36,40,5); coin(36,4); coin(37,4); coin(38,4); coin(39,4); coin(40,4);
+    mh(41,44,9); coin(42,7); coin(43,7);
+    ground(45,58); cp(47); en('beetle',49,55); spike(56,57);
+    ground(62,76); plat(64,66,9); plat(69,71,7); coin(65,8); coin(70,6); en('slime',72,76); en('bee',68,74,6);
+    mv(77); coin(79,4); coin(80,4);
+    ground(81,94); cp(83); spike(87,89); en('beetle',90,94);
+    ground(98,112); pad(105); plat(102,107,5); coin(102,4); coin(103,4); coin(104,4); coin(105,4); coin(106,4); coin(107,4); en('slime',108,112);
+    ground(116,139); en('beetle',120,127); coin(124,9); coin(126,9); flag(132);
+  } else if(idx === 2){
+    ground(0,10); coin(6,8); coin(7,8); coin(8,8);
+    ground(14,22); en('slime',16,21);
+    ground(26,34); en('beetle',28,33);
+    mh(35,38,9); coin(36,7); coin(37,7);
+    ground(39,50); cp(41); spike(44,46); pad(48); plat(46,50,4); coin(46,3); coin(47,3); coin(48,3); coin(49,3); coin(50,3);
+    ground(54,66); en('bee',56,61,7); en('slime',61,66); coin(60,6);
+    mv(67); coin(69,4); coin(70,4);
+    ground(71,84); cp(73); en('beetle',76,81); spike(82,83);
+    ground(88,100); plat(90,92,9); plat(95,97,7); coin(91,8); coin(96,6); en('bee',92,97,6); spike(98,99);
+    mh(101,104,8); coin(102,6); coin(103,6);
+    ground(105,118); cp(107); en('beetle',110,115); spike(116,117);
+    ground(122,149); en('slime',126,130); pad(132); plat(130,134,5); coin(130,4); coin(131,4); coin(132,4); coin(133,4); coin(134,4); flag(142);
+  } else {
+    ground(0,8);
+    mh(9,12,9); coin(10,7); coin(11,7);
+    ground(13,22); en('slime',15,20); cp(20);
+    ground(26,36); en('beetle',28,33); en('bee',33,36,7);
+    mv(37); coin(39,4); coin(40,4);
+    ground(41,52); cp(43); spike(46,48); en('beetle',49,52);
+    mh(53,56,8); coin(54,6); coin(55,6);
+    ground(57,68); en('slime',59,64); en('bee',64,68,6); coin(62,8);
+    ground(72,82); pad(76); plat(74,79,4); coin(74,3); coin(75,3); coin(76,3); coin(77,3); coin(78,3); coin(79,3); cp(80);
+    mh(83,87,9,95); coin(84,7); coin(85,7); coin(86,7);
+    ground(88,98); en('beetle',90,95); spike(96,97);
+    mv(99); coin(101,4); coin(102,4);
+    ground(103,114); cp(105); spike(108,110); en('slime',111,114);
+    ground(118,130); en('bee',120,125,7); en('beetle',125,130);
+    mh(131,134,7,95); coin(132,5); coin(133,5);
+    ground(135,159); cp(137); spike(140,142); coin(146,9); coin(148,9); flag(152);
   }
-  ground(c, c+14);
-  set(c+11, 10, 'F');
-  coin(c+5,9); coin(c+7,9);
-  const W = c + 15;
-  const gc = g.map(row => row.slice(0, W));
+
   let coinsTotal = 0;
-  for(let y=0;y<ROWS;y++) for(let x=0;x<W;x++) if(gc[y][x] === 'o') coinsTotal++;
-  return {g:gc, W, movPlats, enemies, enemiesInit: JSON.parse(JSON.stringify(enemies)), coinsTotal, cp:{}, boss:null};
-}
-function bossLevel(){
-  const W = 64;
-  const g = Array.from({length:ROWS}, () => Array(W).fill(' '));
-  for(let x=0;x<W;x++) for(let y=11;y<ROWS;y++) g[y][x] = '#';
-  g[8][10] = 'o'; g[8][14] = 'o'; g[8][18] = 'o'; g[6][30] = 'o'; g[6][34] = 'o';
-  const boss = {x:(W-12)*T, y:11*T-66, w:84, h:66, vx:0, vy:0, hp:6, hpMax:6,
-    state:'idle', timer:2.2, stun:0, flash:0, alive:true, deadT:0, face:-1};
-  return {g, W, movPlats:[], enemies:[], enemiesInit:[], coinsTotal:5, cp:{}, boss};
-}
-function buildLevel(idx){
-  if(idx === LEVEL_NAMES.length - 1) return bossLevel();
-  return genLevel(idx);
+  for(let y=0;y<ROWS;y++) for(let x=0;x<W;x++) if(g[y][x] === 'o') coinsTotal++;
+  return {g, W, movPlats, enemies, enemiesInit: JSON.parse(JSON.stringify(enemies)), coinsTotal, cp:{}};
 }
 
 /* ---------- состояние ---------- */
@@ -575,7 +502,7 @@ function winGame(){
     btnAgain.textContent = 'ДАЛЬШЕ ▸';
   } else {
     G.pendingNext = false;
-    ovTitle.textContent = 'БОСС ПОВЕРЖЕН! КОСТЯ — ГЕРОЙ!';
+    ovTitle.textContent = 'ПОБЕДА! КОСТЯ — ГЕРОЙ!';
     wCoins.textContent = G.totalCoins + ' (все уровни)';
     btnAgain.textContent = 'ЕЩЁ РАЗ';
   }
@@ -590,69 +517,6 @@ function updEnemies(dt){
     if(e.x > e.max){ e.x = e.max; e.dir = -1; }
     if(e.type === 'bee') e.y = e.baseY + Math.sin(G.t*e.freq + e.phase)*e.amp;
   }
-}
-function spawnMinion(B){
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const x = clamp(B.x + side*140, 2*T, (L.W-2)*T - 36);
-  const m = makeEnemy('slime', 2, L.W-2);
-  m.x = x; m.y = 11*T - m.h;
-  m.dir = P.x > x ? 1 : -1;
-  L.enemies.push(m);
-}
-function updBoss(dt){
-  const B = L.boss;
-  if(!B) return;
-  if(!B.alive){
-    B.deadT -= dt;
-    if(B.deadT <= 0 && G.state === 'play') winGame();
-    return;
-  }
-  B.flash = Math.max(0, B.flash - dt);
-  if(B.stun > 0){
-    B.stun -= dt;
-    B.vx = 0;
-    if(B.stun <= 0){ B.state = 'idle'; B.timer = 1.3 + Math.random()*0.8; }
-  } else if(B.state === 'idle'){
-    const dir = P.x > B.x + B.w/2 ? 1 : -1;
-    B.face = dir;
-    B.x += dir*45*dt;
-    B.timer -= dt;
-    if(B.timer <= 0){
-      if(Math.random() < 0.65){
-        B.vy = -880;
-        B.vx = dir*(170 + Math.random()*90);
-        B.state = 'air';
-      } else {
-        B.state = 'charge';
-        B.timer = 0.7;
-        B.vx = dir*330;
-        B.face = dir;
-      }
-    }
-  } else if(B.state === 'charge'){
-    B.timer -= dt;
-    if(B.timer <= 0){ B.state = 'idle'; B.timer = 1.2 + Math.random()*0.8; B.vx = 0; }
-  }
-  B.vy = Math.min(1400, B.vy + 2000*dt);
-  B.x += B.vx*dt;
-  B.y += B.vy*dt;
-  const floor = 11*T - B.h;
-  if(B.y > floor){
-    B.y = floor;
-    if(B.state === 'air'){
-      B.vy = 0;
-      B.state = 'stun';
-      B.stun = 1.1;
-      B.vx = 0;
-      G.shake = Math.max(G.shake, 0.5);
-      sfx.boss();
-      puff(B.x+B.w/2, B.y+B.h, 14, '#b06bd4', 150);
-      let aliveMin = 0;
-      for(const e of L.enemies) if(e.alive) aliveMin++;
-      if(B.hp <= 4 && aliveMin < 2) spawnMinion(B);
-    } else { B.vy = 0; }
-  }
-  B.x = clamp(B.x, 2*T, (L.W-3)*T - B.w);
 }
 function update(dt){
   G.t += dt;
@@ -689,7 +553,6 @@ function update(dt){
     else P.plat = null;
   }
   updEnemies(dt);
-  updBoss(dt);
 
   const acc = P.grounded ? 2400 : 1600;
   let ax = 0;
@@ -733,25 +596,6 @@ function update(dt){
         P.jumps = 1;
         sfx.stomp();
         puff(e.x+e.w/2, e.y+e.h/2, 10, '#ffffff', 120);
-      } else { die(); return; }
-    }
-  }
-  /* босс */
-  const B = L.boss;
-  if(B && B.alive && G.state === 'play'){
-    if(P.x < B.x+B.w && P.x+P.w > B.x && P.y < B.y+B.h && P.y+P.h > B.y){
-      if(P.vy > 0 && P.prevB <= B.y + 20){
-        B.hp--; B.flash = 0.35; B.stun = 1.0; B.state = 'stun'; B.vx = 0;
-        P.vy = keys.jHeld ? -850 : -600;
-        P.jumps = 1;
-        sfx.stomp();
-        puff(B.x+B.w/2, B.y, 14, '#ffd94a', 150);
-        G.shake = Math.max(G.shake, 0.6);
-        if(B.hp <= 0){
-          B.alive = false; B.deadT = 1.4;
-          sfx.boss();
-          puff(B.x+B.w/2, B.y+B.h/2, 40, '#8a4bd0', 260);
-        }
       } else { die(); return; }
     }
   }
@@ -937,24 +781,6 @@ function drawEnemy(e){
   ctx.restore();
   ctx.globalAlpha = 1;
 }
-function drawBoss(){
-  const B = L.boss;
-  if(!B) return;
-  if(!B.alive && B.deadT <= 0) return;
-  if(B.flash > 0 && Math.floor(G.t*30) % 2 === 0) return;
-  const img = B.face > 0 ? BSPR.f : BSPR.n;
-  ctx.save();
-  ctx.translate(B.x + B.w/2, B.y + B.h);
-  let sy = 1, sx = 1, al = 1;
-  if(!B.alive){ const k = Math.max(0, B.deadT/1.4); sy = 0.2 + 0.8*k; al = k; }
-  else if(B.stun > 0){ sy = 0.9; sx = 1.1; }
-  else { sy = 1 + Math.sin(G.t*4)*0.04; }
-  ctx.globalAlpha = al;
-  ctx.scale(sx, sy);
-  ctx.drawImage(img, -B.w/2, -B.h, B.w, B.h);
-  ctx.restore();
-  ctx.globalAlpha = 1;
-}
 function drawHud(){
   ctx.font = '10px "Press Start 2P", monospace';
   ctx.textBaseline = 'top';
@@ -972,22 +798,9 @@ function drawHud(){
   ctx.fillText(G.coins + ' / ' + L.coinsTotal, 44, 16);
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(0,0,0,.55)';
-  ctx.fillRect(VW/2-120, 12, 240, 18);
+  ctx.fillRect(VW/2-90, 12, 180, 18);
   ctx.fillStyle = '#ffcf6e';
-  ctx.fillText('УР.' + (G.levelIdx+1) + '/' + LEVEL_NAMES.length + ' ' + LEVEL_NAMES[G.levelIdx], VW/2, 16);
-  if(L.boss){
-    const B = L.boss;
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(VW/2-130, 34, 260, 16);
-    ctx.fillStyle = '#5b1010';
-    ctx.fillRect(VW/2-126, 37, 252, 10);
-    ctx.fillStyle = '#e74c3c';
-    ctx.fillRect(VW/2-126, 37, 252*Math.max(0, B.hp)/B.hpMax, 10);
-    ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('КОРОЛЬ ЖУКОВ', VW/2, 54);
-  }
-  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.fillText('УР.' + (G.levelIdx+1) + '/4 ' + LEVEL_NAMES[G.levelIdx], VW/2, 16);
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(0,0,0,.55)';
   ctx.fillRect(VW-158, 12, 142, 40);
@@ -998,12 +811,12 @@ function drawHud(){
   ctx.textAlign = 'left';
   if(G.banner > 0){
     ctx.globalAlpha = Math.min(1, G.banner);
-    ctx.font = '20px "Press Start 2P", monospace';
+    ctx.font = '22px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(VW/2-320, VH/2-70, 640, 60);
+    ctx.fillRect(VW/2-270, VH/2-70, 540, 60);
     ctx.fillStyle = '#ffcf6e';
-    ctx.fillText('УРОВЕНЬ ' + (G.levelIdx+1) + ': ' + LEVEL_NAMES[G.levelIdx], VW/2, VH/2-50);
+    ctx.fillText('УРОВЕНЬ ' + (G.levelIdx+1) + ': ' + LEVEL_NAMES[G.levelIdx], VW/2, VH/2-52);
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
@@ -1044,7 +857,6 @@ function render(){
   }
   for(const m of L.movPlats) drawPlank(m.x, m.y, m.w, m.h);
   for(const e of L.enemies) drawEnemy(e);
-  drawBoss();
   for(const p of parts){
     ctx.globalAlpha = Math.max(0, p.life/p.tl);
     ctx.fillStyle = p.col;
